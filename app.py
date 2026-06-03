@@ -269,3 +269,83 @@ if st.button("Hitung Risiko"):
     ax.grid(True)
 
     st.pyplot(fig)
+    
+    st.subheader("Grafik Kontribusi Rule Sugeno")
+    rule_names = []
+    alpha_values = []
+    kontribusi = []
+
+    bobot = {
+        'rendah': 20,
+        'sedang': 50,
+        'tinggi': 80
+    }
+
+    for i, (kategori, alpha) in enumerate(rules):
+
+        rule_names.append(f"R{i+1}")
+
+        alpha_values.append(alpha)
+
+        kontribusi.append(
+            alpha * bobot[kategori]
+        )
+
+    fig2, ax2 = plt.subplots(figsize=(12,5))
+
+    bars = ax2.bar(
+        rule_names,
+        kontribusi
+    )
+
+    ax2.set_title(
+        "Kontribusi Tiap Rule pada Defuzzifikasi Sugeno"
+    )
+
+    ax2.set_xlabel("Rule")
+    ax2.set_ylabel("Nilai α × z")
+
+    for bar in bars:
+        height = bar.get_height()
+
+        ax2.text(
+            bar.get_x() + bar.get_width()/2,
+            height,
+            f"{height:.2f}",
+            ha='center',
+            va='bottom'
+        )
+
+    st.pyplot(fig2)
+    
+    st.subheader("Perbandingan Hasil Akhir")
+
+    fig3, ax3 = plt.subplots(figsize=(6,4))
+
+    metode = ["Mamdani", "Sugeno"]
+    nilai = [skor_mamdani, skor_sugeno]
+
+    bars = ax3.bar(
+        metode,
+        nilai
+    )
+
+    ax3.set_ylim(0, 100)
+
+    ax3.set_ylabel("Skor Risiko")
+
+    ax3.set_title(
+        "Perbandingan Skor Risiko"
+    )
+
+    for bar in bars:
+        height = bar.get_height()
+
+        ax3.text(
+            bar.get_x() + bar.get_width()/2,
+            height + 1,
+            f"{height:.2f}",
+            ha='center'
+        )
+
+    st.pyplot(fig3)
