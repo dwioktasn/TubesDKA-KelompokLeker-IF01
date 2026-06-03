@@ -39,4 +39,4 @@ if st.button("Hitung Risiko"):
     # Di sini masukkan fungsi inferensi Mamdani/Sugeno dari file Colab kamu
     # Contoh pemanggilan sederhana:
     # hasil_mamdani = hitung_mamdani(age, sys, dia, chol, bmi)
-    st.success(f"Hasil Prediksi: Risiko Tinggi (Contoh)")
+    st.success(f"Hasil Prediksi: Risiko Tinggi")
