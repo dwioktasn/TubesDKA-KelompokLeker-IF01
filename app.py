@@ -132,8 +132,8 @@ def gambar_semua_membership(usia, sistolik, diastolik, kolesterol, bmi):
 
 with st.sidebar:
     st.markdown("## 🫀 Fuzzy Cardio Risk")
-    metode = st.radio("Metode Defuzzifikasi:", ['Sugeno (Cepat)', 'Mamdani (Akurat)'])
-    metode_key = 'sugeno' if 'Sugeno' in metode else 'mamdani'
+    metode_pilihan = st.radio("Metode Defuzzifikasi Aktif:", ['Sugeno (Cepat)', 'Mamdani (Akurat)'])
+    metode_key = 'sugeno' if 'Sugeno' in metode_pilihan else 'mamdani'
     
     st.markdown("---")
     usia = st.slider("Usia", 18, 90, 45)
@@ -151,11 +151,12 @@ with st.sidebar:
 # MAIN
 # ─────────────────────────────────────────────────────────────────────────────
 
-tab_prediksi, tab_membership, tab_rules = st.tabs(["📊 Prediksi", "📈 Fungsi Keanggotaan", "📋 Rule Base"])
+tab_prediksi, tab_membership, tab_rules = st.tabs(["📊 Prediksi & Grafik", "📈 Fungsi Keanggotaan", "📋 Rule Base"])
 
 with tab_prediksi:
     if hitung or 'last_result' in st.session_state:
         if hitung:
+            # Hitung satu kali untuk metode yang dipilih
             skor, label, fuzzy_vals, rule_detail = prediksi_pasien(usia, sistolik, diastolik, kolesterol, bmi, metode=metode_key)
             st.session_state['last_result'] = (skor, label, fuzzy_vals, rule_detail, metode_key)
         else:
@@ -163,31 +164,29 @@ with tab_prediksi:
 
         warna, ikon = warna_risiko(label)
         
+        # --- Bagian Metric ---
         col1, col2 = st.columns([1, 2])
         with col1:
-            st.metric("Skor Risiko", f"{skor:.2f}%", label)
+            st.metric(f"Skor {metode_key.title()}", f"{skor:.2f}%", label)
             st.progress(max(0.0, min(skor / 100, 1.0)))
         with col2:
             st.markdown(f"""<div style="padding:20px;border-radius:15px;background:{warna}22;border:2px solid {warna};">
                         <h2 style="color:{warna};margin:0;">{ikon} {label}</h2></div>""", unsafe_allow_html=True)
 
-        st.markdown("### 🔢 Derajat Keanggotaan")
-        cols = st.columns(5)
-        for col, vname in zip(cols, fuzzy_vals.keys()):
-            with col:
-                st.write(f"**{vname}**")
-                for k, v in fuzzy_vals[vname].items():
-                    st.caption(f"{k}: {v:.3f}")
-                    st.progress(float(v))
-
         st.markdown("---")
-        st.markdown("### 📊 Visualisasi Hasil")
+
+        # --- Bagian Grafik Berdampingan ---
+        st.subheader("📈 Visualisasi Perbandingan Defuzzifikasi")
+        col_mam, col_sug = st.columns(2)
+
+        # Hitung data Mamdani & Sugeno secara manual untuk grafik
+        rules_inf = jalankan_inferensi_15_rules(fuzzy_vals['Usia'], fuzzy_vals['Sistolik'], 
+                                               fuzzy_vals['Diastolik'], fuzzy_vals['Kolesterol'], fuzzy_vals['BMI'])
         
-        if metode_key == "mamdani":
+        with col_mam:
+            st.write("**Mamdani (Area Agregasi)**")
             x_s = np.linspace(0, 100, 500)
             agregasi = []
-            rules_inf = jalankan_inferensi_15_rules(fuzzy_vals['Usia'], fuzzy_vals['Sistolik'], 
-                                                   fuzzy_vals['Diastolik'], fuzzy_vals['Kolesterol'], fuzzy_vals['BMI'])
             for x in x_s:
                 m_r, m_s, m_t = fungsi_trapesium(x,0,0,20,40), fungsi_segitiga(x,30,50,70), fungsi_trapesium(x,60,80,100,100)
                 val = 0
@@ -196,13 +195,65 @@ with tab_prediksi:
                     val = max(val, mu)
                 agregasi.append(val)
             
-            fig_mam, ax_mam = plt.subplots(figsize=(8,3))
-            ax_mam.fill_between(x_s, agregasi, color='cyan', alpha=0.3)
-            ax_mam.axvline(skor, color='red', linestyle='--')
-            st.pyplot(fig_mam)
-        else:
-            df_sugeno = pd.DataFrame(rule_detail, columns=['Rule', 'Kondisi', 'Output', 'Alpha'])
-            st.bar_chart(df_sugeno.set_index('Rule')['Alpha'])
+            fig_m, ax_m = plt.subplots(figsize=(6,4))
+            ax_m.set_facecolor('#0f172a')
+            fig_m.patch.set_facecolor('#1e293b')
+            ax_m.plot(x_s, agregasi, color='cyan', linewidth=2)
+            ax_m.fill_between(x_s, agregasi, color='cyan', alpha=0.3)
+            # Ambil skor mamdani murni untuk garis
+            s_mamdani = defuzzifikasi_mamdani(rules_inf)
+            ax_m.axvline(s_mamdani, color='red', linestyle='--', label=f'Centroid: {s_mamdani:.2f}')
+            ax_m.tick_params(colors='#94a3b8')
+            ax_m.legend()
+            st.pyplot(fig_m)
+
+        with col_sug:
+            st.write("**Sugeno (Kontribusi Rule)**")
+            df_sug = pd.DataFrame(rule_detail, columns=['Rule', 'Kondisi', 'Output', 'Alpha'])
+            bobot_map = {'rendah': 20, 'sedang': 50, 'tinggi': 80}
+            df_sug['Kontribusi'] = df_sug.apply(lambda r: r['Alpha'] * bobot_map[r['Output'].lower()], axis=1)
+            
+            fig_s, ax_s = plt.subplots(figsize=(6,4))
+            ax_s.set_facecolor('#0f172a')
+            fig_s.patch.set_facecolor('#1e293b')
+            ax_s.bar(df_sug['Rule'], df_sug['Kontribusi'], color='orange')
+            ax_s.set_title("Alpha x Singleton", color='white', fontsize=10)
+            ax_s.tick_params(colors='#94a3b8', labelsize=8)
+            st.pyplot(fig_s)
+
+        st.markdown("---")
+
+        # --- Bagian Dijejerin (Perbandingan Skor Akhir) ---
+        st.subheader("📊 Perbandingan Skor Akhir")
+        s_mamdani = defuzzifikasi_mamdani(rules_inf)
+        s_sugeno = defuzzifikasi_sugeno(rules_inf)
+
+        fig_comp, ax_comp = plt.subplots(figsize=(10, 4))
+        ax_comp.set_facecolor('#0f172a')
+        fig_comp.patch.set_facecolor('#1e293b')
+        
+        metodes = ['Mamdani', 'Sugeno']
+        skors = [s_mamdani, s_sugeno]
+        bars = ax_comp.barh(metodes, skors, color=['cyan', 'orange'])
+        
+        ax_comp.set_xlim(0, 100)
+        ax_comp.tick_params(colors='#94a3b8')
+        for bar in bars:
+            width = bar.get_width()
+            ax_comp.text(width + 2, bar.get_y() + bar.get_height()/2, f'{width:.2f}%', 
+                         color='white', va='center', fontweight='bold')
+        
+        st.pyplot(fig_comp)
+
+        # --- Derajat Keanggotaan ---
+        st.markdown("### 🔢 Derajat Keanggotaan Input")
+        cols = st.columns(5)
+        for col, vname in zip(cols, fuzzy_vals.keys()):
+            with col:
+                st.write(f"**{vname}**")
+                for k, v in fuzzy_vals[vname].items():
+                    st.caption(f"{k}: {v:.3f}")
+                    st.progress(float(v))
 
 with tab_membership:
     st.pyplot(gambar_semua_membership(usia, sistolik, diastolik, kolesterol, bmi))
